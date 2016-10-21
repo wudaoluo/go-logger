@@ -24,7 +24,7 @@ var consoleAppender bool = true
 var RollingFile bool = false
 var logObj *_FILE
 
-const DATEFORMAT = "2006-01-02"
+const DATEFORMAT = "2006-01-02-15"
 
 type UNIT int64
 
