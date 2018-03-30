@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"io/ioutil"
+	"strings"
 )
 
 const (
@@ -55,6 +57,7 @@ type _FILE struct {
 	mu       *sync.RWMutex
 	logfile  *os.File
 	lg       *log.Logger
+	saveNums  int64
 }
 
 func SetConsole(isConsole bool) {
@@ -65,37 +68,13 @@ func SetLevel(_level LEVEL) {
 	logLevel = _level
 }
 
-func SetRollingFile(fileDir, fileName string, maxNumber int32, maxSize int64, _unit UNIT) {
-	maxFileCount = maxNumber
-	maxFileSize = maxSize * int64(_unit)
-	RollingFile = true
-	dailyRolling = false
-	mkdirlog(fileDir)
-	logObj = &_FILE{dir: fileDir, filename: fileName, isCover: false, mu: new(sync.RWMutex)}
-	logObj.mu.Lock()
-	defer logObj.mu.Unlock()
-	for i := 1; i <= int(maxNumber); i++ {
-		if isExist(fileDir + "/" + fileName + "." + strconv.Itoa(i)) {
-			logObj._suffix = i
-		} else {
-			break
-		}
-	}
-	if !logObj.isMustRename() {
-		logObj.logfile, _ = os.OpenFile(fileDir+"/"+fileName, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0666)
-		logObj.lg = log.New(logObj.logfile, "", log.Ldate|log.Ltime|log.Lshortfile)
-	} else {
-		logObj.rename()
-	}
-	go fileMonitor()
-}
 
-func SetRollingDaily(fileDir, fileName string) {
+func SetRollingDaily(fileDir, fileName string,nums int64) {
 	RollingFile = false
 	dailyRolling = true
 	t, _ := time.Parse(DATEFORMAT, time.Now().Format(DATEFORMAT))
 	mkdirlog(fileDir)
-	logObj = &_FILE{dir: fileDir, filename: fileName, _date: &t, isCover: false, mu: new(sync.RWMutex)}
+	logObj = &_FILE{dir: fileDir, filename: fileName, _date: &t, isCover: false, saveNums:nums,mu: new(sync.RWMutex)}
 	logObj.mu.Lock()
 	defer logObj.mu.Unlock()
 
@@ -260,6 +239,10 @@ func (f *_FILE) rename() {
 	} else {
 		f.coverNextOne()
 	}
+
+	//判断文件数量是否大于 nums
+
+	clear(f.dir,f.saveNums)
 }
 
 func (f *_FILE) nextSuffix() int {
@@ -315,4 +298,20 @@ func fileCheck() {
 		defer logObj.mu.Unlock()
 		logObj.rename()
 	}
+}
+
+
+func clear(dirname string,nums int64) (err error){
+	now := time.Now()
+	dirList, err := ioutil.ReadDir(dirname)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	for _,v := range dirList {
+		if now.Unix() - v.ModTime().Unix() > 3600*nums {
+			os.Remove(strings.Join([]string{dirname, v.Name()}, "/"))
+		}
+	}
+	return
 }
